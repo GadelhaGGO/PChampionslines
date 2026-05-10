@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Placar Jogador Caro ⚽</title>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --secondary: #1b5e20;
+            --danger: #c62828;
+            --bg: #e8f5e9;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg);
+            margin: 0; padding: 10px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .container { width: 100%; max-width: 500px; }
+        h2 { text-align: center; color: var(--secondary); }
+
+        .player-card {
+            background: white; border-radius: 12px;
+            padding: 15px; margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative; border-left: 5px solid var(--primary);
+        }
+
+        .player-header { display: flex; gap: 8px; margin-bottom: 10px; }
+        input, select { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        input[type="text"] { flex-grow: 2; font-weight: bold; }
+
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        button { 
+            padding: 10px 5px; border: none; border-radius: 6px; 
+            font-size: 11px; font-weight: bold; cursor: pointer; 
+        }
+
+        .btn-add { background: var(--primary); color: white; width: 100%; padding: 15px; font-size: 16px; margin-top: 10px; }
+        .btn-whatsapp { background: #25d366; color: white; width: 100%; padding: 15px; font-size: 16px; margin-top: 10px; border-radius: 8px; }
+        
+        .btn-stat { background: #f0f0f0; color: #333; border: 1px solid #ddd; }
+        .btn-history { background: #607d8b; color: white; grid-column: span 3; margin-top: 5px; }
+        
+        .btn-delete { 
+            background: var(--danger); color: white; position: absolute; 
+            top: -8px; right: -8px; width: 28px; height: 28px; 
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .score-display {
+            font-size: 20px; font-weight: bold; text-align: right;
+            color: var(--primary); margin-top: 10px; border-top: 1px dashed #eee; padding-top: 5px;
+        }
+
+        .history-log {
+            font-size: 11px; color: #666; background: #f9f9f9;
+            padding: 8px; margin-top: 8px; border-radius: 4px;
+            display: none; max-height: 100px; overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Gadelha Champions Lines</h2>
+    
+    <div id="lista-jogadores"></div>
+
+    <button id="add-player-btn" class="btn-add" onclick="addPlayer()">+ Adicionar Jogador</button>
+    <button class="btn-whatsapp" onclick="copyToWhatsapp()">📋 Copiar Resumo para WhatsApp</button>
+</div>
+
+<script>
+    let players = JSON.parse(localStorage.getItem('gadelha_players')) || [];
+
+    function save() {
+        localStorage.setItem('gadelha_players', JSON.stringify(players));
+    }
+
+    function init() {
+        if (players.length === 0) {
+            for (let i = 0; i < 11; i++) createPlayerData();
+        }
+        render();
+    }
+
+    function createPlayerData() {
+        const id = Date.now() + Math.random();
+        players.push({
+            id: id,
+            nome: '',
+            posicao: 'zagueiro',
+            pontos: 0,
+            historico: ['Início da partida'],
+            stats: { gol: 0, assist: 0, amarelo: 0, vermelho: 0, sofrido: 0, defesa: 0, penalti: 0, sg: true }
+        });
+        save();
+    }
+
+    function addPlayer() {
+        if (players.length >= 30) return alert("Máximo de 30 jogadores.");
+        createPlayerData();
+        render();
+    }
+
+    function removePlayer(id) {
+        players = players.filter(p => p.id !== id);
+        save();
+        render();
+    }
+
+    function updateField(id, field, value) {
+        const p = players.find(p => p.id === id);
+        p[field] = value;
+        calculateScore(p);
+        save();
+        render();
+    }
+
+    function changeStat(id, stat, label, val) {
+        const p = players.find(p => p.id === id);
+        p.stats[stat] += val;
+        if (p.stats[stat] < 0) p.stats[stat] = 0;
+        
+        p.historico.push(`${val > 0 ? '+' : '-'}${label}`);
+        calculateScore(p);
+        save();
+        render();
+    }
+
+    function toggleSG(id) {
+        const p = players.find(p => p.id === id);
+        p.stats.sg = !p.stats.sg;
+        p.historico.push(`SG alterado para: ${p.stats.sg ? 'Sim' : 'Não'}`);
+        calculateScore(p);
+        save();
+        render();
+    }
+
+    function calculateScore(p) {
+        let score = 0;
+        const s = p.stats;
+        const pos = p.posicao;
+
+        const isDefesa = ['goleiro', 'zagueiro', 'lateral'].includes(pos);
+        const isMeio = pos === 'meio campo';
+
+        if (isDefesa) {
+            score = 5;
+            if (!s.sg || s.sofrido > 0) score = 5 - (s.sofrido * 3);
+            score += (s.gol * 8) + (s.assist * 5);
+            if (pos === 'goleiro') score += (s.defesa * 1) + (s.penalti * 5);
+        } else {
+            score = isMeio ? 3 : 1;
+            score += (s.gol * 8) + (s.assist * 3);
+        }
+        score += (s.amarelo * -3) + (s.vermelho * -8);
+        p.pontos = score;
+    }
+
+    function toggleHistoryDisplay(id) {
+        const el = document.getElementById(`log-${id}`);
+        el.style.display = el.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function render() {
+        const container = document.getElementById('lista-jogadores');
+        container.innerHTML = '';
+
+        players.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'player-card';
+            card.innerHTML = `
+                <button class="btn-delete" onclick="removePlayer(${p.id})">×</button>
+                <div class="player-header">
+                    <input type="text" value="${p.nome}" placeholder="Nome" onchange="updateField(${p.id}, 'nome', this.value)">
+                    <select onchange="updateField(${p.id}, 'posicao', this.value)">
+                        <option value="goleiro" ${p.posicao === 'goleiro' ? 'selected' : ''}>Goleiro</option>
+                        <option value="zagueiro" ${p.posicao === 'zagueiro' ? 'selected' : ''}>Zagueiro</option>
+                        <option value="lateral" ${p.posicao === 'lateral' ? 'selected' : ''}>Lateral</option>
+                        <option value="meio campo" ${p.posicao === 'meio campo' ? 'selected' : ''}>Meio</option>
+                        <option value="ponta" ${p.posicao === 'ponta' ? 'selected' : ''}>Ponta</option>
+                        <option value="ataque" ${p.posicao === 'ataque' ? 'selected' : ''}>Ataque</option>
+                    </select>
+                </div>
+                <div class="controls">
+                    <button class="btn-stat" onclick="changeStat(${p.id}, 'gol', 'Gol', 1)">⚽ Gol</button>
+                    <button class="btn-stat" onclick="changeStat(${p.id}, 'assist', 'Assist', 1)">🎯 Ast</button>
+                    <button class="btn-stat" onclick="changeStat(${p.id}, 'amarelo', 'Amarelo', 1)">🟨 Am</button>
+                    <button class="btn-stat" onclick="changeStat(${p.id}, 'vermelho', 'Vermelho', 1)">🟥 Ver</button>
+                    <button class="btn-stat" onclick="changeStat(${p.id}, 'sofrido', 'Gol Sofrido', 1)">🥅 GS</button>
+                    <button class="btn-stat" onclick="toggleSG(${p.id})">🛡️ SG: ${p.stats.sg ? '✅' : '❌'}</button>
+                    ${p.posicao === 'goleiro' ? `
+                        <button class="btn-stat" onclick="changeStat(${p.id}, 'defesa', 'Def. Difícil', 1)">🧤 Def</button>
+                        <button class="btn-stat" onclick="changeStat(${p.id}, 'penalti', 'Pênalti', 1)">🧤 Pên</button>
+                    ` : ''}
+                    <button class="btn-history" onclick="toggleHistoryDisplay(${p.id})">📜 Ver Histórico</button>
+                </div>
+                <div class="history-log" id="log-${p.id}">${p.historico.join(' | ')}</div>
+                <div class="score-display">Pontos: ${p.pontos}</div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function copyToWhatsapp() {
+        let texto = "*📋 RELATÓRIO DA PARTIDA - JOGADOR CARO ⚽*\n\n";
+        players.forEach(p => {
+            if(p.nome) {
+                texto += `*${p.nome.toUpperCase()}* (${p.posicao})\n`;
+                texto += `⭐ Pontos: ${p.pontos}\n`;
+                texto += `📝 Histórico: ${p.historico.slice(-5).join(' | ')}\n`;
+                texto += `--------------------------\n`;
+            }
+        });
+        
+        navigator.clipboard.writeText(texto).then(() => {
+            alert("Relatório copiado! Agora é só colar no WhatsApp.");
+        });
+    }
+
+    init();
+</script>
+
+</body>
+</html>
